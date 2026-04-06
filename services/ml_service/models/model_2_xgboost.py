@@ -2,14 +2,27 @@
 import numpy as np
 import pickle
 import logging
-import xgboost as xgb
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
+    xgb = None
+    logging.warning("XGBoost not available. Install with: pip install xgboost")
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict
 from datetime import datetime
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.isotonic import IsotonicRegression
-import optuna
-from optuna.samplers import TPESampler
+try:
+    import optuna
+    from optuna.samplers import TPESampler
+    OPTUNA_AVAILABLE = True
+except ImportError:
+    OPTUNA_AVAILABLE = False
+    optuna = None
+    TPESampler = None
+    logging.warning("Optuna not available. Install with: pip install optuna")
 
 from app.models.base_model import BaseModel, MarketType, Session
 
@@ -105,6 +118,9 @@ class XGBoostOutcomeClassifier(BaseModel):
 
         if params:
             self.default_params.update(params)
+
+        # Only certified if XGBoost is available
+        self.certified = XGBOOST_AVAILABLE
 
     def _get_time_weight(self, match_date: datetime) -> float:
         """Calculate exponential decay weight based on match age."""

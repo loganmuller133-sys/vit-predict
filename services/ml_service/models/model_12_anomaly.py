@@ -156,6 +156,9 @@ class AnomalyRegimeDetectionModel(BaseModel):
         # PCA state
         self.pca_fitted: bool = False
 
+        # Always certified (uses sklearn which is core)
+        self.certified = True
+
     def _calculate_psi(
         self,
         expected: np.ndarray,

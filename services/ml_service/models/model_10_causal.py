@@ -138,6 +138,9 @@ class CausalInferenceModel(BaseModel):
         # Store feature names
         self.feature_names: List[str] = []
 
+        # Always certified (has fallback logic)
+        self.certified = True
+
     def _prepare_causal_data(
         self,
         matches: List[Dict[str, Any]]

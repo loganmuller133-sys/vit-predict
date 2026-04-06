@@ -11,6 +11,8 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
     nn = None
+    Data = None
+    Batch = None
 import logging
 import pickle
 from typing import Dict, List, Optional, Any, Tuple
@@ -331,7 +333,7 @@ class GNNModel(BaseModel):
         batch_size: int = 32,
         epochs: int = 100,
         patience: int = 10,
-        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device: Optional[str] = None
     ):
         super().__init__(
             model_name=model_name,
@@ -365,7 +367,10 @@ class GNNModel(BaseModel):
         self.batch_size = batch_size
         self.epochs = epochs
         self.patience = patience
-        self.device = device
+        if device is None:
+            self.device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
+        else:
+            self.device = device
 
         # Model components
         self.model: Optional[GraphNeuralNetwork] = None
@@ -380,6 +385,9 @@ class GNNModel(BaseModel):
         self.best_val_loss: float = float('inf')
         self.best_model_state: Optional[Dict] = None
         self.current_date: Optional[datetime] = None
+
+        # Only certify if PyTorch and torch_geometric are available
+        self.certified = TORCH_AVAILABLE
 
     def _extract_node_features(self, team: str, matches: List[Dict]) -> List[float]:
         """Extract node features for a team."""
@@ -440,7 +448,7 @@ class GNNModel(BaseModel):
         matches: List[Dict],
         current_date: datetime,
         is_training: bool = True
-    ) -> Tuple[List[Data], List[Dict]]:
+    ) -> Tuple[List[Any], List[Dict]]:
         """
         Build graph from match data with O(n) complexity.
         """

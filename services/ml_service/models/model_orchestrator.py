@@ -16,7 +16,7 @@ from .model_7_gnn import GraphNeuralNetworkModel
 from .model_8_bayesian import BayesianHierarchicalModel
 from .model_9_rl_agent import RLPolicyAgent
 from .model_10_causal import CausalInferenceModel
-from .model_11_sentiment import MultiModalSentimentModel
+from .model_11_sentiment import SentimentFusionModel
 from .model_12_anomaly import AnomalyRegimeDetectionModel
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class ModelOrchestrator:
             'bayesian': BayesianHierarchicalModel("bayes_001"),
             'rl_agent': RLPolicyAgent("rl_001"),
             'causal': CausalInferenceModel("causal_001"),
-            'sentiment': MultiModalSentimentModel("sent_001"),
+            'sentiment': SentimentFusionModel("sent_001"),
             'anomaly': AnomalyRegimeDetectionModel("anom_001"),
         }
 

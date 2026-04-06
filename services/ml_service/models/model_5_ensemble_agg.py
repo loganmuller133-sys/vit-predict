@@ -128,6 +128,9 @@ class EnsembleAggregator(BaseModel):
         self.total_bets: int = 0
         self.winning_bets: int = 0
         self.total_roi: float = 0.0
+
+        # Always certified (meta-model)
+        self.certified = True
     
     def _calculate_ev_from_performance(
         self,

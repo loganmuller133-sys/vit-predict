@@ -2,9 +2,17 @@
 import numpy as np
 import logging
 import pickle
-import pymc as pm
-import pytensor.tensor as pt
-import arviz as az
+try:
+    import pymc as pm
+    import pytensor.tensor as pt
+    import arviz as az
+    PYMC_AVAILABLE = True
+except ImportError:
+    PYMC_AVAILABLE = False
+    pm = None
+    pt = None
+    az = None
+    logging.warning("PyMC not available. Install with: pip install pymc arviz pytensor")
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict
 from datetime import datetime
@@ -121,6 +129,9 @@ class BayesianHierarchicalModel(BaseModel):
         self.posterior_attack: Optional[np.ndarray] = None
         self.posterior_defence: Optional[np.ndarray] = None
         self.posterior_home_advantage: Optional[np.ndarray] = None
+
+        # Only certified if PyMC is available
+        self.certified = PYMC_AVAILABLE
 
     def _compute_time_weights(
         self,

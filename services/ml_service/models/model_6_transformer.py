@@ -254,7 +254,7 @@ class TransformerSequenceModel(BaseModel):
         batch_size: int = 32,
         epochs: int = 100,
         patience: int = 10,
-        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device: Optional[str] = None
     ):
         super().__init__(
             model_name=model_name,
@@ -288,7 +288,10 @@ class TransformerSequenceModel(BaseModel):
         self.batch_size = batch_size
         self.epochs = epochs
         self.patience = patience
-        self.device = device
+        if device is None:
+            self.device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
+        else:
+            self.device = device
 
         # Model components
         self.model: Optional[TransformerModel] = None
@@ -311,6 +314,9 @@ class TransformerSequenceModel(BaseModel):
 
         # Attention weights for explainability
         self.last_attention_weights: Optional[np.ndarray] = None
+
+        # Only certify if PyTorch is available
+        self.certified = TORCH_AVAILABLE
 
     def _extract_real_features(
         self,

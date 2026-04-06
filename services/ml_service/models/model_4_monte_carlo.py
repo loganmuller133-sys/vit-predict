@@ -113,6 +113,9 @@ class MonteCarloEngine(BaseModel):
         # Performance tracking
         self.total_simulations_run: int = 0
 
+        # Always certified (uses scipy which is core)
+        self.certified = True
+
     def _sample_dirichlet_probs(
         self,
         base_probs: Dict[str, float],

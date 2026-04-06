@@ -205,7 +205,7 @@ class LSTMMomentumNetworkModel(BaseModel):
         learning_rate: float = 0.001,
         batch_size: int = 32,
         epochs: int = 50,           # Reduced, early stopping will handle
-        device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device: Optional[str] = None
     ):
         super().__init__(
             model_name=model_name,
@@ -228,7 +228,10 @@ class LSTMMomentumNetworkModel(BaseModel):
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.epochs = epochs
-        self.device = device
+        if device is None:
+            self.device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
+        else:
+            self.device = device
         
         # Models
         self.model: Optional[MultiHeadLSTM] = None
@@ -246,6 +249,9 @@ class LSTMMomentumNetworkModel(BaseModel):
         # Training metadata
         self.trained_matches_count: int = 0
         self.unique_teams: List[str] = []
+        
+        # Only certify if PyTorch is available
+        self.certified = TORCH_AVAILABLE
     
     def _extract_match_features(
         self,
@@ -451,7 +457,7 @@ class LSTMMomentumNetworkModel(BaseModel):
         logger.info(f"Input features per timestep: {self.input_size}")
         
         # Set device
-        device = self.device if use_gpu and torch.cuda.is_available() else 'cpu'
+        device = self.device if use_gpu and TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
         logger.info(f"Using device: {device}")
         
         # Initialize multi-head model
@@ -591,7 +597,7 @@ class LSTMMomentumNetworkModel(BaseModel):
         """Calibrate model probabilities using isotonic regression."""
         logger.info("Calibrating model probabilities...")
         
-        device = self.device if torch.cuda.is_available() else 'cpu'
+        device = self.device if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
         self.model.eval()
         
         with torch.no_grad():
@@ -626,7 +632,7 @@ class LSTMMomentumNetworkModel(BaseModel):
         if X_val.shape[0] == 0:
             return {}
         
-        device = self.device if torch.cuda.is_available() else 'cpu'
+        device = self.device if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
         
         self.model.eval()
         with torch.no_grad():
@@ -840,7 +846,7 @@ class LSTMMomentumNetworkModel(BaseModel):
         
         # Rebuild model
         if data['model_state'] and self.input_size > 0:
-            device = self.device if torch.cuda.is_available() else 'cpu'
+            device = self.device if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
             self.model = MultiHeadLSTM(
                 input_size=self.input_size,
                 hidden_size=self.hidden_size,

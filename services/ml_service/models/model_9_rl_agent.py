@@ -44,7 +44,7 @@ class RLConfig:
     epochs_per_update: int = 10
     batch_size: int = 64
     target_kl: float = 0.01
-    device: str = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device: Optional[str] = None
     max_stake: float = 0.20
     min_edge_threshold: float = 0.02
     drawdown_limit: float = 0.15
@@ -310,7 +310,8 @@ class RLPolicyAgent(BaseModel):
         self.risk_penalty_coef = risk_penalty_coef
 
         # Networks
-        self.device = torch.device(RLConfig.device)
+        device_str = RLConfig.device if RLConfig.device else ('cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu')
+        self.device = torch.device(device_str) if TORCH_AVAILABLE else None
         self.actor_critic = ContinuousActorCritic(
             RLConfig.state_dim, RLConfig.hidden_dim, max_stake
         ).to(self.device)
@@ -348,6 +349,9 @@ class RLPolicyAgent(BaseModel):
         # State cache
         self.last_state: Optional[np.ndarray] = None
         self.last_action: Optional[float] = None
+
+        # Only certify if PyTorch is available
+        self.certified = TORCH_AVAILABLE
 
     def _update_model_hash(self):
         """Update model hash for versioning."""
