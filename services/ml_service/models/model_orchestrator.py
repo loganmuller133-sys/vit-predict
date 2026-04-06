@@ -44,7 +44,6 @@ MARKETS = {
 class ModelOrchestrator:
     def __init__(self):
         self.models = {}
-        self.load_all_models()
         self.latencies = {}
 
     def load_all_models(self):

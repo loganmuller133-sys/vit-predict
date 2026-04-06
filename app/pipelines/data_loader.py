@@ -216,7 +216,9 @@ class DataLoader:
                         self.api_client.get_head_to_head(int(home_id), int(away_id), limit=5)
                     )
                 else:
-                    h2h_tasks.append(asyncio.sleep(0, result=[]))
+                    async def _empty_h2h():
+                        return []
+                    h2h_tasks.append(_empty_h2h())
 
             h2h_results = await asyncio.gather(*h2h_tasks, return_exceptions=True)
 

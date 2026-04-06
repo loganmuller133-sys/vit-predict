@@ -75,7 +75,7 @@ async def fetch_and_predict(competition: str, days_ahead: int = 7):
                 "away_recent_form": context.recent_form.get(fixture["away_team"]["external_id"], [])
             }
 
-            prediction = await orchestrator.predict(features)
+            prediction = await orchestrator.predict(features, str(fixture.get("external_id", "")))
             predictions.append(prediction)
 
             # Send alert for high-value bets
@@ -124,7 +124,7 @@ async def lifespan(app: FastAPI):
     # Load models
     print("📦 Loading ML models...")
     orchestrator = ModelOrchestrator()
-    await orchestrator.load_all_models()
+    orchestrator.load_all_models()
     print(f"   ✅ Loaded {orchestrator.num_models_ready()} models")
 
     # Initialize data loader

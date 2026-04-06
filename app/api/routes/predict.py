@@ -139,8 +139,8 @@ async def predict(
                 "market_odds": match.market_odds
             }
 
-            result = await orchestrator.predict(features)
-            result = validate_prediction_response(result)
+            raw_result = await orchestrator.predict(features, idempotency_key)
+            result = validate_prediction_response(raw_result.get("predictions", raw_result))
 
             # Determine best bet
             home_prob = result.get("home_prob", 0.33)
@@ -200,7 +200,7 @@ async def predict(
                     best_bet["odds"]
                 )
 
-            await db.commit()
+            await db.flush()
             await db.refresh(db_match)
             await db.refresh(prediction)
 

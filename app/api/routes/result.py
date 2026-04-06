@@ -86,8 +86,6 @@ async def update_result(
                 profit
             )
 
-        await db.commit()
-
     return {
         "match_id": match_id,
         "actual_outcome": actual_outcome,

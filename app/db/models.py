@@ -41,6 +41,7 @@ class Prediction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     match_id = Column(Integer, ForeignKey("matches.id"), nullable=False)
+    request_hash = Column(String, unique=True, nullable=True, index=True)
 
     # Multi-market predictions
     home_prob = Column(Float, nullable=False)
@@ -135,13 +136,12 @@ class ModelPerformance(Base):
     model_type = Column(String, nullable=False)
     version = Column(Integer, default=1)
 
-        # New columns for accountability
-        weight_decay_rate = Column(Float, default=0.05)
-        min_weight_threshold = Column(Float, default=0.05)
-        performance_window = Column(Integer, default=100)
-        last_weight_update = Column(DateTime(timezone=True), nullable=True)
-        consecutive_underperforming = Column(Integer, default=0)
-    
+    weight_decay_rate = Column(Float, default=0.05)
+    min_weight_threshold = Column(Float, default=0.05)
+    performance_window = Column(Integer, default=100)
+    last_weight_update = Column(DateTime(timezone=True), nullable=True)
+    consecutive_underperforming = Column(Integer, default=0)
+
     # Performance metrics
     accuracy_score = Column(Float)
     current_weight = Column(Float, default=1.0)
