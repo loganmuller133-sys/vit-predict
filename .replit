@@ -6,11 +6,19 @@ run = "bash scripts/start_replit.sh"
 # Language and entrypoint
 language = "python3"
 entrypoint = "main.py"
-modules = ["python-3.11"]
+modules = ["nodejs-20", "python-3.11"]
 
 [[ports]]
 localPort = 3000
 externalPort = 3000
+
+[[ports]]
+localPort = 5173
+externalPort = 80
+
+[[ports]]
+localPort = 5174
+externalPort = 3001
 
 [[ports]]
 localPort = 5432
