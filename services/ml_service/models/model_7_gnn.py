@@ -368,7 +368,7 @@ class GNNModel(BaseModel):
         self.epochs = epochs
         self.patience = patience
         if device is None:
-            self.device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
+            self.device = 'cuda' if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available() else 'cpu'
         else:
             self.device = device
 
