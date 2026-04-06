@@ -1,0 +1,62 @@
+# .replit - Replit Configuration for VIT Network
+
+# Set the default run command
+run = "bash scripts/start_replit.sh"
+
+# Language and entrypoint
+language = "python3"
+entrypoint = "main.py"
+
+# Port mappings
+[[ports]]
+localPort = 8000
+externalPort = 8000
+description = "VIT API Service"
+
+[[ports]]
+localPort = 8001
+externalPort = 8001
+description = "ML Service"
+
+[[ports]]
+localPort = 5432
+externalPort = 5432
+description = "PostgreSQL"
+
+[[ports]]
+localPort = 6379
+externalPort = 6379
+description = "Redis"
+
+[[ports]]
+localPort = 5555
+externalPort = 5555
+description = "Flower (Celery Monitor)"
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
+description = "Grafana"
+
+[[ports]]
+localPort = 9090
+externalPort = 9090
+description = "Prometheus"
+
+# Environment variables
+[env]
+AUTH_ENABLED = "false"
+LOG_LEVEL = "INFO"
+
+# Start all services
+[[process]]
+name = "docker"
+command = "docker-compose up --build"
+
+# Shell configuration
+[shell]
+command = "bash"
+
+# Editor settings
+[editor]
+theme = "dark"

@@ -1,0 +1,35 @@
+# docker-compose.replit.yml - Lightweight version for Replit
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: vit_api
+    environment:
+      DATABASE_URL: sqlite:///./vit.db
+      REDIS_URL: memory://
+      AUTH_ENABLED: "false"
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./vit.db:/app/vit.db
+      - ./models:/app/models
+    restart: unless-stopped
+
+  ml_service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ml
+    container_name: vit_ml_service
+    environment:
+      DATABASE_URL: sqlite:///./vit.db
+      LOG_LEVEL: INFO
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./vit.db:/app/vit.db
+      - ./models:/app/models
+    restart: unless-stopped

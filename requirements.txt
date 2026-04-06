@@ -1,0 +1,19 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+psycopg2-binary
+aiohttp
+numpy
+pandas
+scikit-learn
+xgboost
+torch
+# requirements.txt - Add these for scraping
+httpx==0.25.1
+beautifulsoup4==4.12.2
+lxml==4.9.3
+tenacity==8.2.3
+playwright==1.40.0
+# Add tenacity for retry logic
+tenacity==8.2.3
