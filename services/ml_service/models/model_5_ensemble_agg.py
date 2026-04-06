@@ -792,19 +792,19 @@ class EnsembleAggregator(BaseModel):
                 "recommendations": []
             }
 
-        async def predict(self, features: Dict[str, Any]) -> Dict[str, Any]:
-            """
-            Generate ensemble prediction with bet recommendations.
-            """
-            model_predictions = features.get('model_predictions', {})
-            market_context = features.get('market_context', {})
+    async def predict(self, features: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate ensemble prediction with bet recommendations.
+        """
+        model_predictions = features.get('model_predictions', {})
+        market_context = features.get('market_context', {})
 
-            if not model_predictions:
-                return self._default_aggregation()
+        if not model_predictions:
+            return self._default_aggregation()
 
-            aggregated = self.aggregate_predictions(model_predictions, market_context, return_weights=False)
+        aggregated = self.aggregate_predictions(model_predictions, market_context, return_weights=False)
 
-            return aggregated
+        return aggregated
 
         def update_bet_result(
             self,
@@ -857,45 +857,45 @@ class EnsembleAggregator(BaseModel):
                        f"Profit: {profit:.2f}, Drawdown: {self.current_drawdown:.2%}, "
                        f"ROI: {self.total_roi:.2%}")
 
-        def get_confidence_score(self, market: str = "1x2") -> float:
-            """Return ensemble confidence score."""
-            if not hasattr(self, 'current_aggregation'):
-                return 0.5
+    def get_confidence_score(self, market: str = "1x2") -> float:
+        """Return ensemble confidence score."""
+        if not hasattr(self, 'current_aggregation'):
+            return 0.5
 
-            conf = self.current_aggregation.get('confidence', {}).get(market, 0.5)
-            return float(conf)
+        conf = self.current_aggregation.get('confidence', {}).get(market, 0.5)
+        return float(conf)
 
-        def train(self, matches: List[Dict[str, Any]]) -> Dict[str, Any]:
-            """
-            Train ensemble aggregator on historical data.
-            """
-            if not matches:
-                return {"error": "No training data"}
+    def train(self, matches: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Train ensemble aggregator on historical data.
+        """
+        if not matches:
+            return {"error": "No training data"}
 
-            logger.info(f"Training ensemble aggregator on {len(matches)} matches")
+        logger.info(f"Training ensemble aggregator on {len(matches)} matches")
 
-            # Process historical matches
-            for match in matches:
-                if 'model_predictions' in match and 'actual_outcome' in match:
-                    for model_name, pred in match['model_predictions'].items():
-                        self.update_model_performance(
-                            model_name,
-                            pred,
-                            match['actual_outcome'],
-                            match.get('home_goals', 0),
-                            match.get('away_goals', 0),
-                            match.get('market_odds', {})
-                        )
-            
-            self.trained_matches_count = len(matches)
-            self.last_optimization = datetime.now()
-            
-            # Calculate aggregate metrics
-            avg_ev = np.mean([p.expected_value for p in self.model_performance.values() if p.sample_size > 0])
-            avg_calibration = np.mean([1 - p.calibration_error for p in self.model_performance.values() if p.sample_size > 0])
-            
-            logger.info(f"Ensemble training complete. Avg EV: {avg_ev:.3f}, "
-                       f"Avg Calibration: {avg_calibration:.3f}")
+        # Process historical matches
+        for match in matches:
+            if 'model_predictions' in match and 'actual_outcome' in match:
+                for model_name, pred in match['model_predictions'].items():
+                    self.update_model_performance(
+                        model_name,
+                        pred,
+                        match['actual_outcome'],
+                        match.get('home_goals', 0),
+                        match.get('away_goals', 0),
+                        match.get('market_odds', {})
+                    )
+        
+        self.trained_matches_count = len(matches)
+        self.last_optimization = datetime.now()
+        
+        # Calculate aggregate metrics
+        avg_ev = np.mean([p.expected_value for p in self.model_performance.values() if p.sample_size > 0])
+        avg_calibration = np.mean([1 - p.calibration_error for p in self.model_performance.values() if p.sample_size > 0])
+        
+        logger.info(f"Ensemble training complete. Avg EV: {avg_ev:.3f}, "
+                   f"Avg Calibration: {avg_calibration:.3f}")
         
         return {
             "model_type": self.model_type,
@@ -907,7 +907,6 @@ class EnsembleAggregator(BaseModel):
             "market_regime": self.market_regime,
             "regime_confidence": self.regime_confidence
         }
-    
     def update_model_performance(
         self,
         model_name: str,
