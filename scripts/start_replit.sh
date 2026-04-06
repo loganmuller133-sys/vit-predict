@@ -101,13 +101,19 @@ run_docker() {
 }
 
 # Main execution
-echo ""
-echo "Select execution mode:"
-echo "1) Docker Compose (full stack)"
-echo "2) Native Python (lightweight)"
-echo ""
-read -p "Enter choice (1 or 2): " -n 1 -r
-echo ""
+if [ -n "${REPL_SLUG:-}" ] || [ -n "${REPL_ID:-}" ] || ! tty -s; then
+    echo "Auto-detected non-interactive/Replit environment."
+    REPLY="1"
+else
+    echo ""
+    echo "Select execution mode:"
+    echo "1) Docker Compose (full stack)"
+    echo "2) Native Python (lightweight)"
+    echo ""
+    read -p "Enter choice (1 or 2): " -n 1 -r
+    echo ""
+    REPLY=${REPLY:-1}
+fi
 
 if [[ $REPLY =~ ^[1]$ ]]; then
     if check_docker; then
