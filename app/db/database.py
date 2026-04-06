@@ -8,12 +8,22 @@ load_dotenv()
 
 _raw_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost:5432/vit_db")
 
-# Guarantee asyncpg driver — replace any sync postgres scheme
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+# Guarantee asyncpg driver — replace any sync postgres scheme and remove unsupported sslmode params
 def _make_async_url(url: str) -> str:
-    for sync_prefix in ("postgresql://", "postgres://", "postgresql+psycopg2://"):
-        if url.startswith(sync_prefix):
-            return url.replace(sync_prefix, "postgresql+asyncpg://", 1)
-    return url
+    parsed = urlparse(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+
+    # asyncpg does not accept sslmode as a direct connect keyword argument
+    query.pop("sslmode", None)
+
+    scheme = parsed.scheme
+    if scheme in ("postgresql", "postgres") or scheme == "postgresql+psycopg2":
+        scheme = "postgresql+asyncpg"
+
+    safe_query = urlencode(query)
+    return urlunparse(parsed._replace(scheme=scheme, query=safe_query))
 
 DATABASE_URL = _make_async_url(_raw_url)
 
