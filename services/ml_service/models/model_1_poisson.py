@@ -77,6 +77,9 @@ class PoissonGoalModel(BaseModel):
         
         # Market awareness (populated during prediction)
         self.market_odds: Dict[str, float] = {}
+
+        # Always certified (uses scipy which is core)
+        self.certified = True
     
     def _get_time_weight(self, match_date: datetime) -> float:
         """Calculate exponential decay weight based on match age."""
