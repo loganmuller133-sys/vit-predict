@@ -5,10 +5,16 @@ import logging
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict
 from datetime import datetime
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    from torch.utils.data import Dataset, DataLoader
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+    nn = None
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.isotonic import IsotonicRegression
 
@@ -17,21 +23,27 @@ from app.models.base_model import BaseModel, MarketType, Session
 logger = logging.getLogger(__name__)
 
 
-class MatchSequenceDataset(Dataset):
-    """PyTorch dataset for sequence prediction with proper isolation."""
-    
-    def __init__(self, sequences: np.ndarray, targets: np.ndarray):
-        self.sequences = torch.FloatTensor(sequences)
-        self.targets = torch.LongTensor(targets)
-    
-    def __len__(self):
-        return len(self.targets)
-    
-    def __getitem__(self, idx):
-        return self.sequences[idx], self.targets[idx]
+if TORCH_AVAILABLE:
+    class MatchSequenceDataset(Dataset):
+        """PyTorch dataset for sequence prediction with proper isolation."""
+
+        def __init__(self, sequences: np.ndarray, targets: np.ndarray):
+            self.sequences = torch.FloatTensor(sequences)
+            self.targets = torch.LongTensor(targets)
+
+        def __len__(self):
+            return len(self.targets)
+
+        def __getitem__(self, idx):
+            return self.sequences[idx], self.targets[idx]
+else:
+    MatchSequenceDataset = None
 
 
-class SimpleLSTM(nn.Module):
+_NNBase = nn.Module if TORCH_AVAILABLE else object
+
+
+class SimpleLSTM(_NNBase):
     """
     Simple, efficient LSTM for momentum detection.
     
@@ -101,7 +113,7 @@ class SimpleLSTM(nn.Module):
         return out
 
 
-class MultiHeadLSTM(nn.Module):
+class MultiHeadLSTM(_NNBase):
     """
     Multi-head LSTM - one shared LSTM, multiple output heads.
     More efficient than 3 separate models.
@@ -845,3 +857,5 @@ class LSTMMomentumNetworkModel(BaseModel):
         self.certified = data.get('certified', False)
         
         logger.info(f"Model loaded from {path}")
+# alias
+LSTMMomentumNetwork = LSTMMomentumNetworkModel

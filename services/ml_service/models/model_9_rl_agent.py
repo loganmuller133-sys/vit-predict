@@ -1,10 +1,16 @@
 # services/ml-service/models/model_9_rl_agent.py
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.distributions import Normal
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    import torch.nn.functional as F
+    from torch.distributions import Normal
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+    nn = None
 import logging
 import pickle
 import hashlib
@@ -13,6 +19,8 @@ from typing import Dict, List, Optional, Any, Tuple
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
+
+_NNBase = nn.Module if TORCH_AVAILABLE else object
 
 from app.models.base_model import BaseModel, MarketType, Session
 
@@ -91,7 +99,7 @@ class RolloutBuffer:
         return len(self.states)
 
 
-class ContinuousActorCritic(nn.Module):
+class ContinuousActorCritic(_NNBase):
     """
     Continuous Actor-Critic network for PPO.
 

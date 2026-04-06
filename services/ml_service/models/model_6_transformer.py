@@ -1,10 +1,16 @@
 # services/ml-service/models/model_6_transformer.py
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    import torch.nn.functional as F
+    from torch.utils.data import Dataset, DataLoader
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+    nn = None
 import logging
 import pickle
 from typing import Dict, List, Optional, Any, Tuple
@@ -13,6 +19,8 @@ from datetime import datetime
 from dataclasses import dataclass
 import math
 from sklearn.preprocessing import StandardScaler
+
+_NNBase = nn.Module if TORCH_AVAILABLE else object
 
 from app.models.base_model import BaseModel, MarketType, Session
 
@@ -34,7 +42,7 @@ class TransformerConfig:
     num_classes_btts: int = 2
 
 
-class PositionalEncoding(nn.Module):
+class PositionalEncoding(_NNBase):
     """Sinusoidal positional encoding with dropout."""
 
     def __init__(self, d_model: int, max_len: int = 100, dropout: float = 0.1):
@@ -56,7 +64,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-class TimeAwareAttention(nn.Module):
+class TimeAwareAttention(_NNBase):
     """Attention with time decay injected BEFORE softmax."""
 
     def __init__(self, d_model: int, nhead: int, dropout: float = 0.1):
@@ -101,7 +109,7 @@ class TimeAwareAttention(nn.Module):
         return output, attn_weights
 
 
-class TransformerModel(nn.Module):
+class TransformerModel(_NNBase):
     """Transformer with time-aware attention and multi-head outputs."""
 
     def __init__(self, config: TransformerConfig):
@@ -190,26 +198,29 @@ class TransformerModel(nn.Module):
         return logits_1x2, logits_ou, logits_btts, attn_weights
 
 
-class MatchSequenceDataset(Dataset):
-    """Dataset with proper temporal isolation."""
+if TORCH_AVAILABLE:
+    class MatchSequenceDataset(Dataset):
+        """Dataset with proper temporal isolation."""
 
-    def __init__(self, sequences, time_deltas, targets_1x2, targets_ou, targets_btts, masks=None):
-        self.sequences = torch.FloatTensor(sequences)
-        self.time_deltas = torch.FloatTensor(time_deltas)
-        self.targets_1x2 = torch.LongTensor(targets_1x2)
-        self.targets_ou = torch.LongTensor(targets_ou)
-        self.targets_btts = torch.LongTensor(targets_btts)
-        self.masks = torch.FloatTensor(masks) if masks is not None else None
+        def __init__(self, sequences, time_deltas, targets_1x2, targets_ou, targets_btts, masks=None):
+            self.sequences = torch.FloatTensor(sequences)
+            self.time_deltas = torch.FloatTensor(time_deltas)
+            self.targets_1x2 = torch.LongTensor(targets_1x2)
+            self.targets_ou = torch.LongTensor(targets_ou)
+            self.targets_btts = torch.LongTensor(targets_btts)
+            self.masks = torch.FloatTensor(masks) if masks is not None else None
 
-    def __len__(self):
-        return len(self.targets_1x2)
+        def __len__(self):
+            return len(self.targets_1x2)
 
-    def __getitem__(self, idx):
-        if self.masks is not None:
-            return (self.sequences[idx], self.time_deltas[idx], self.masks[idx],
+        def __getitem__(self, idx):
+            if self.masks is not None:
+                return (self.sequences[idx], self.time_deltas[idx], self.masks[idx],
+                        self.targets_1x2[idx], self.targets_ou[idx], self.targets_btts[idx])
+            return (self.sequences[idx], self.time_deltas[idx],
                     self.targets_1x2[idx], self.targets_ou[idx], self.targets_btts[idx])
-        return (self.sequences[idx], self.time_deltas[idx],
-                self.targets_1x2[idx], self.targets_ou[idx], self.targets_btts[idx])
+else:
+    MatchSequenceDataset = None
 
 
 class TransformerSequenceModel(BaseModel):

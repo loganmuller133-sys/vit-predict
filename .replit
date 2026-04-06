@@ -6,42 +6,35 @@ run = "bash scripts/start_replit.sh"
 # Language and entrypoint
 language = "python3"
 entrypoint = "main.py"
-
-# Port mappings
-[[ports]]
-localPort = 8000
-externalPort = 8000
-description = "VIT API Service"
-
-[[ports]]
-localPort = 8001
-externalPort = 8001
-description = "ML Service"
-
-[[ports]]
-localPort = 5432
-externalPort = 5432
-description = "PostgreSQL"
-
-[[ports]]
-localPort = 6379
-externalPort = 6379
-description = "Redis"
-
-[[ports]]
-localPort = 5555
-externalPort = 5555
-description = "Flower (Celery Monitor)"
+modules = ["python-3.11"]
 
 [[ports]]
 localPort = 3000
 externalPort = 3000
-description = "Grafana"
+
+[[ports]]
+localPort = 5432
+externalPort = 5432
+
+[[ports]]
+localPort = 5555
+externalPort = 5555
+
+[[ports]]
+localPort = 6379
+externalPort = 6379
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
+[[ports]]
+localPort = 8001
+externalPort = 8001
 
 [[ports]]
 localPort = 9090
 externalPort = 9090
-description = "Prometheus"
 
 # Environment variables
 [env]
@@ -84,3 +77,10 @@ waitForPort = 8000
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
+packages = ["gitFull", "glibcLocales", "libxcrypt", "pkg-config", "playwright-driver", "postgresql", "xcodebuild", "xsimd", "zlib"]

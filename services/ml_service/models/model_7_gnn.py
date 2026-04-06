@@ -1,10 +1,16 @@
 # services/ml-service/models/model_7_gnn.py
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, SAGEConv, GATConv, global_mean_pool, global_add_pool, AttentionalAggregation
-from torch_geometric.data import Data, Batch
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from torch_geometric.nn import GCNConv, SAGEConv, GATConv, global_mean_pool, global_add_pool, AttentionalAggregation
+    from torch_geometric.data import Data, Batch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+    nn = None
 import logging
 import pickle
 from typing import Dict, List, Optional, Any, Tuple
@@ -12,6 +18,8 @@ from collections import defaultdict
 from datetime import datetime
 from dataclasses import dataclass
 from sklearn.preprocessing import StandardScaler
+
+_NNBase = nn.Module if TORCH_AVAILABLE else object
 
 from app.models.base_model import BaseModel, MarketType, Session
 
@@ -34,361 +42,263 @@ class GNNConfig:
     time_decay_tau: float = 90.0  # Days for half-life
 
 
-class TimeDecayEdgeWeight(nn.Module):
-    """Learnable time decay for edge importance."""
+if TORCH_AVAILABLE:
+    class TimeDecayEdgeWeight(_NNBase):
+        """Learnable time decay for edge importance."""
 
-    def __init__(self, tau: float = 90.0):
-        super().__init__()
-        self.tau = tau
-        self.decay_factor = nn.Parameter(torch.ones(1) * 0.5)
+        def __init__(self, tau: float = 90.0):
+            super().__init__()
+            self.tau = tau
+            self.decay_factor = nn.Parameter(torch.ones(1) * 0.5)
 
-    def forward(self, days_since_match: torch.Tensor) -> torch.Tensor:
-        """
-        Compute time decay weight.
-        weight = exp(-days / tau)
-        """
-        decay = torch.exp(-days_since_match / (self.tau * self.decay_factor.abs()))
-        return decay.clamp(min=0.05, max=1.0)
+        def forward(self, days_since_match):
+            decay = torch.exp(-days_since_match / (self.tau * self.decay_factor.abs()))
+            return decay.clamp(min=0.05, max=1.0)
 
+    class AttentionPooling(_NNBase):
+        """Attention-based graph pooling (important nodes get more weight)."""
 
-class AttentionPooling(nn.Module):
-    """Attention-based graph pooling (important nodes get more weight)."""
-
-    def __init__(self, hidden_dim: int):
-        super().__init__()
-        self.attention = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.Tanh(),
-            nn.Linear(hidden_dim // 2, 1)
-        )
-
-    def forward(self, x, batch):
-        # Compute attention scores
-        attention_scores = self.attention(x)
-
-        # Softmax per graph
-        attention_weights = []
-        for b in batch.unique():
-            mask = (batch == b)
-            scores = attention_scores[mask]
-            weights = F.softmax(scores, dim=0)
-            attention_weights.append(weights)
-
-        attention_weights = torch.cat(attention_weights)
-
-        # Weighted sum
-        weighted_x = x * attention_weights
-
-        # Global sum pooling with attention weights
-        return global_add_pool(weighted_x, batch)
-
-
-class GraphNeuralNetwork(nn.Module):
-    """
-    Graph Neural Network V2 - Fixed and production-ready.
-
-    Fixes applied:
-        - Edge weights handled correctly per conv type
-        - Temporal edge decay
-        - Attention pooling
-        - Residual connections with layer norm
-        - Proper node/edge normalization
-    """
-
-    def __init__(self, config: GNNConfig):
-        super().__init__()
-        self.config = config
-        self.num_layers = config.num_layers
-        self.conv_type = config.conv_type
-
-        # Node encoder with normalization
-        self.node_encoder = nn.Sequential(
-            nn.Linear(config.node_features, config.hidden_channels),
-            nn.LayerNorm(config.hidden_channels),
-            nn.ReLU(),
-            nn.Dropout(config.dropout)
-        )
-
-        # Edge encoder
-        self.edge_encoder = nn.Sequential(
-            nn.Linear(config.edge_features, 32),
-            nn.ReLU(),
-            nn.Linear(32, 1),
-            nn.Sigmoid()
-        )
-
-        # Time decay for edges
-        self.time_decay = TimeDecayEdgeWeight(tau=config.time_decay_tau)
-
-        # Graph convolution layers with proper edge weight handling
-        self.convs = nn.ModuleList()
-        self.norms = nn.ModuleList()
-
-        for i in range(config.num_layers):
-            if config.conv_type == "gcn":
-                conv = GCNConv(config.hidden_channels, config.hidden_channels)
-            elif config.conv_type == "sage":
-                conv = SAGEConv(config.hidden_channels, config.hidden_channels)
-            elif config.conv_type == "gat":
-                conv = GATConv(config.hidden_channels, config.hidden_channels // config.num_heads,
-                              heads=config.num_heads, concat=True)
-            else:
-                conv = SAGEConv(config.hidden_channels, config.hidden_channels)
-
-            self.convs.append(conv)
-            self.norms.append(nn.LayerNorm(config.hidden_channels))
-
-        self.dropout = nn.Dropout(config.dropout)
-
-        # Attention pooling for graph readout
-        self.pool = AttentionalAggregation(
-            nn.Sequential(
-                nn.Linear(config.hidden_channels, config.hidden_channels // 2),
+        def __init__(self, hidden_dim: int):
+            super().__init__()
+            self.attention = nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim // 2),
                 nn.Tanh(),
-                nn.Linear(config.hidden_channels // 2, 1)
+                nn.Linear(hidden_dim // 2, 1)
             )
-        )
 
-        # Match prediction heads
-        self.match_encoder = nn.Sequential(
-            nn.Linear(config.hidden_channels * 2, 128),
-            nn.LayerNorm(128),
-            nn.ReLU(),
-            nn.Dropout(config.dropout),
-            nn.Linear(128, 64),
-            nn.LayerNorm(64),
-            nn.ReLU()
-        )
+        def forward(self, x, batch):
+            attention_scores = self.attention(x)
+            attention_weights = []
+            for b in batch.unique():
+                mask = (batch == b)
+                scores = attention_scores[mask]
+                weights = F.softmax(scores, dim=0)
+                attention_weights.append(weights)
+            attention_weights = torch.cat(attention_weights)
+            weighted_x = x * attention_weights
+            return global_add_pool(weighted_x, batch)
 
-        self.head_1x2 = nn.Linear(64, config.output_dim_1x2)
-        self.head_ou = nn.Linear(64, config.output_dim_ou)
-        self.head_btts = nn.Linear(64, config.output_dim_btts)
+else:
+    TimeDecayEdgeWeight = None
+    AttentionPooling = None
 
-        self._init_weights()
 
-    def _init_weights(self):
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-
-    def forward(self, x, edge_index, edge_attr, edge_days, batch):
+if TORCH_AVAILABLE:
+    class GraphNeuralNetwork(_NNBase):
         """
-        Forward pass with proper edge weight handling.
+        Graph Neural Network V2 - Fixed and production-ready.
 
-        Args:
-            x: Node features (num_nodes, node_features)
-            edge_index: Graph connectivity (2, num_edges)
-            edge_attr: Raw edge features (num_edges, edge_features)
-            edge_days: Days since match for each edge (num_edges,)
-            batch: Batch assignment (num_nodes,)
+        Fixes applied:
+            - Edge weights handled correctly per conv type
+            - Temporal edge decay
+            - Attention pooling
+            - Residual connections with layer norm
+            - Proper node/edge normalization
         """
-        # Encode nodes
-        x = self.node_encoder(x)
 
-        # Compute edge weights (base + time decay)
-        base_edge_weights = self.edge_encoder(edge_attr).squeeze(-1)
-        time_weights = self.time_decay(edge_days)
-        edge_weight = base_edge_weights * time_weights
+        def __init__(self, config: GNNConfig):
+            super().__init__()
+            self.config = config
+            self.num_layers = config.num_layers
+            self.conv_type = config.conv_type
 
-        # Message passing layers
-        for i, conv in enumerate(self.convs):
-            # Handle edge weights based on conv type
-            if self.conv_type == "gcn":
-                # GCN supports edge_weight parameter
-                x_new = conv(x, edge_index, edge_weight=edge_weight)
+            self.node_encoder = nn.Sequential(
+                nn.Linear(config.node_features, config.hidden_channels),
+                nn.LayerNorm(config.hidden_channels),
+                nn.ReLU(),
+                nn.Dropout(config.dropout)
+            )
+            self.edge_encoder = nn.Sequential(
+                nn.Linear(config.edge_features, 32),
+                nn.ReLU(),
+                nn.Linear(32, 1),
+                nn.Sigmoid()
+            )
+            self.time_decay = TimeDecayEdgeWeight(tau=config.time_decay_tau)
+            self.convs = nn.ModuleList()
+            self.norms = nn.ModuleList()
+
+            for i in range(config.num_layers):
+                if config.conv_type == "gcn":
+                    conv = GCNConv(config.hidden_channels, config.hidden_channels)
+                elif config.conv_type == "sage":
+                    conv = SAGEConv(config.hidden_channels, config.hidden_channels)
+                elif config.conv_type == "gat":
+                    conv = GATConv(config.hidden_channels, config.hidden_channels // config.num_heads,
+                                  heads=config.num_heads, concat=True)
+                else:
+                    conv = SAGEConv(config.hidden_channels, config.hidden_channels)
+                self.convs.append(conv)
+                self.norms.append(nn.LayerNorm(config.hidden_channels))
+
+            self.dropout = nn.Dropout(config.dropout)
+            self.pool = AttentionalAggregation(
+                nn.Sequential(
+                    nn.Linear(config.hidden_channels, config.hidden_channels // 2),
+                    nn.Tanh(),
+                    nn.Linear(config.hidden_channels // 2, 1)
+                )
+            )
+            self.match_encoder = nn.Sequential(
+                nn.Linear(config.hidden_channels * 2, 128),
+                nn.LayerNorm(128),
+                nn.ReLU(),
+                nn.Dropout(config.dropout),
+                nn.Linear(128, 64),
+                nn.LayerNorm(64),
+                nn.ReLU()
+            )
+            self.head_1x2 = nn.Linear(64, config.output_dim_1x2)
+            self.head_ou = nn.Linear(64, config.output_dim_ou)
+            self.head_btts = nn.Linear(64, config.output_dim_btts)
+            self._init_weights()
+
+        def _init_weights(self):
+            for p in self.parameters():
+                if p.dim() > 1:
+                    nn.init.xavier_uniform_(p)
+
+        def forward(self, x, edge_index, edge_attr, edge_days, batch):
+            x = self.node_encoder(x)
+            base_edge_weights = self.edge_encoder(edge_attr).squeeze(-1)
+            time_weights = self.time_decay(edge_days)
+            edge_weight = base_edge_weights * time_weights
+
+            for i, conv in enumerate(self.convs):
+                if self.conv_type == "gcn":
+                    x_new = conv(x, edge_index, edge_weight=edge_weight)
+                else:
+                    x_new = conv(x, edge_index)
+                x_new = self.norms[i](x_new)
+                x_new = F.relu(x_new)
+                x_new = self.dropout(x_new)
+                x = x + x_new
+
+            graph_embedding = self.pool(x, batch)
+            return x, graph_embedding
+
+        def predict_match(self, home_embedding, away_embedding):
+            match_embedding = torch.cat([home_embedding, away_embedding], dim=-1)
+            match_features = self.match_encoder(match_embedding)
+            logits_1x2 = self.head_1x2(match_features)
+            logits_ou = self.head_ou(match_features)
+            logits_btts = self.head_btts(match_features)
+            return logits_1x2, logits_ou, logits_btts
+
+else:
+    GraphNeuralNetwork = None
+
+
+if TORCH_AVAILABLE:
+    class LeagueGraphBuilder:
+        """Build and update league graph with temporal awareness."""
+
+        def __init__(
+            self,
+            node_features_dim: int = 32,
+            edge_features_dim: int = 8,
+            max_history_days: int = 365
+        ):
+            self.node_features_dim = node_features_dim
+            self.edge_features_dim = edge_features_dim
+            self.max_history_days = max_history_days
+            self.team_to_idx: Dict[str, int] = {}
+            self.idx_to_team: Dict[int, str] = {}
+            self.node_features: Dict[str, np.ndarray] = {}
+            self.node_last_update: Dict[str, datetime] = {}
+            self.edge_features: Dict[Tuple[str, str], Tuple[np.ndarray, datetime]] = {}
+            self._graph_cache = None
+            self._cache_timestamp = None
+
+        def _time_decay_weight(self, update_date: datetime, current_date: datetime) -> float:
+            days_diff = (current_date - update_date).days
+            if days_diff <= 0:
+                return 1.0
+            return np.exp(-days_diff / 30.0)
+
+        def update_node_features(self, team: str, features: List[float], match_date: datetime):
+            features_array = np.array(features)
+            if team not in self.node_features:
+                self.node_features[team] = features_array
+                self.node_last_update[team] = match_date
             else:
-                # SAGE and GAT don't support edge_weight
-                # Inject edge importance via feature concatenation instead
-                x_new = conv(x, edge_index)
+                weight = self._time_decay_weight(self.node_last_update[team], match_date)
+                self.node_features[team] = self.node_features[team] * weight + features_array * (1 - weight)
+                self.node_last_update[team] = match_date
 
-            # Residual connection with layer norm
-            x_new = self.norms[i](x_new)
-            x_new = F.relu(x_new)
-            x_new = self.dropout(x_new)
+        def update_edge_features(self, team1: str, team2: str, features: List[float], match_date: datetime):
+            key = tuple(sorted([team1, team2]))
+            features_array = np.array(features)
+            if key not in self.edge_features:
+                self.edge_features[key] = (features_array, match_date)
+            else:
+                existing_features, last_date = self.edge_features[key]
+                weight = self._time_decay_weight(last_date, match_date)
+                new_features = existing_features * weight + features_array * (1 - weight)
+                self.edge_features[key] = (new_features, match_date)
+            self._graph_cache = None
 
-            x = x + x_new  # Residual
-
-        # Graph-level pooling with attention
-        graph_embedding = self.pool(x, batch)
-
-        return x, graph_embedding
-
-    def predict_match(self, home_embedding, away_embedding):
-        """Predict match outcome from home and away embeddings."""
-        match_embedding = torch.cat([home_embedding, away_embedding], dim=-1)
-        match_features = self.match_encoder(match_embedding)
-
-        logits_1x2 = self.head_1x2(match_features)
-        logits_ou = self.head_ou(match_features)
-        logits_btts = self.head_btts(match_features)
-
-        return logits_1x2, logits_ou, logits_btts
-
-
-class LeagueGraphBuilder:
-    """Build and update league graph with temporal awareness."""
-
-    def __init__(
-        self,
-        node_features_dim: int = 32,
-        edge_features_dim: int = 8,
-        max_history_days: int = 365
-    ):
-        self.node_features_dim = node_features_dim
-        self.edge_features_dim = edge_features_dim
-        self.max_history_days = max_history_days
-
-        # Team mappings
-        self.team_to_idx: Dict[str, int] = {}
-        self.idx_to_team: Dict[int, str] = {}
-
-        # Node features (rolling with exponential decay)
-        self.node_features: Dict[str, np.ndarray] = {}
-        self.node_last_update: Dict[str, datetime] = {}
-
-        # Edge features with time decay
-        self.edge_features: Dict[Tuple[str, str], Tuple[np.ndarray, datetime]] = {}
-
-        # Graph cache
-        self._graph_cache: Optional[Data] = None
-        self._cache_timestamp: Optional[datetime] = None
-
-    def _time_decay_weight(self, update_date: datetime, current_date: datetime) -> float:
-        """Compute exponential decay weight for feature updates."""
-        days_diff = (current_date - update_date).days
-        if days_diff <= 0:
-            return 1.0
-        return np.exp(-days_diff / 30.0)  # 30-day half-life
-
-    def update_node_features(
-        self, 
-        team: str, 
-        features: List[float], 
-        match_date: datetime
-    ):
-        """Update rolling node features with exponential decay."""
-        features_array = np.array(features)
-
-        if team not in self.node_features:
-            self.node_features[team] = features_array
-            self.node_last_update[team] = match_date
-        else:
-            # Exponential moving average with time decay
-            weight = self._time_decay_weight(self.node_last_update[team], match_date)
-            self.node_features[team] = self.node_features[team] * weight + features_array * (1 - weight)
-            self.node_last_update[team] = match_date
-
-    def update_edge_features(
-        self,
-        team1: str,
-        team2: str,
-        features: List[float],
-        match_date: datetime
-    ):
-        """Update edge features with time decay."""
-        key = tuple(sorted([team1, team2]))
-        features_array = np.array(features)
-
-        if key not in self.edge_features:
-            self.edge_features[key] = (features_array, match_date)
-        else:
-            existing_features, last_date = self.edge_features[key]
-            weight = self._time_decay_weight(last_date, match_date)
-            new_features = existing_features * weight + features_array * (1 - weight)
-            self.edge_features[key] = (new_features, match_date)
-
-        # Invalidate cache
-        self._graph_cache = None
-
-    def build_graph(self, current_date: datetime) -> Optional[Data]:
-        """Build PyTorch Geometric graph from current state."""
-        if not self.team_to_idx:
-            return None
-
-        # Check cache
-        if self._graph_cache is not None and self._cache_timestamp == current_date:
+        def build_graph(self, current_date: datetime):
+            if not self.team_to_idx:
+                return None
+            if self._graph_cache is not None and self._cache_timestamp == current_date:
+                return self._graph_cache
+            num_nodes = len(self.team_to_idx)
+            node_feat_matrix = np.zeros((num_nodes, self.node_features_dim))
+            for team, idx in self.team_to_idx.items():
+                if team in self.node_features:
+                    if team in self.node_last_update:
+                        decay = self._time_decay_weight(self.node_last_update[team], current_date)
+                        node_feat_matrix[idx] = self.node_features[team] * decay
+                    else:
+                        node_feat_matrix[idx] = self.node_features[team]
+                else:
+                    node_feat_matrix[idx] = np.ones(self.node_features_dim) * 0.5
+            edge_index = []
+            edge_attr = []
+            edge_days = []
+            for (team1, team2), (features, last_date) in self.edge_features.items():
+                if team1 in self.team_to_idx and team2 in self.team_to_idx:
+                    idx1 = self.team_to_idx[team1]
+                    idx2 = self.team_to_idx[team2]
+                    decay = self._time_decay_weight(last_date, current_date)
+                    decayed_features = features * decay
+                    edge_index.append([idx1, idx2])
+                    edge_index.append([idx2, idx1])
+                    edge_attr.append(decayed_features)
+                    edge_attr.append(decayed_features)
+                    days_since = (current_date - last_date).days
+                    edge_days.append(min(days_since, 365))
+                    edge_days.append(min(days_since, 365))
+            if not edge_index:
+                return None
+            edge_index_t = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
+            edge_attr_t = torch.tensor(np.array(edge_attr), dtype=torch.float)
+            edge_days_t = torch.tensor(edge_days, dtype=torch.float)
+            self._graph_cache = Data(
+                x=torch.tensor(node_feat_matrix, dtype=torch.float),
+                edge_index=edge_index_t,
+                edge_attr=edge_attr_t,
+                edge_days=edge_days_t
+            )
+            self._cache_timestamp = current_date
             return self._graph_cache
 
-        num_nodes = len(self.team_to_idx)
+        def get_team_embedding(self, team: str, model: "GraphNeuralNetwork", current_date: datetime):
+            graph = self.build_graph(current_date)
+            if graph is None or team not in self.team_to_idx:
+                return None
+            idx = self.team_to_idx[team]
+            with torch.no_grad():
+                node_embeddings, _ = model(
+                    graph.x, graph.edge_index, graph.edge_attr,
+                    graph.edge_days,
+                    torch.zeros(graph.x.size(0), dtype=torch.long)
+                )
+            return node_embeddings[idx]
 
-        # Node features matrix
-        node_feat_matrix = np.zeros((num_nodes, self.node_features_dim))
-        for team, idx in self.team_to_idx.items():
-            if team in self.node_features:
-                # Apply time decay to node features
-                if team in self.node_last_update:
-                    decay = self._time_decay_weight(self.node_last_update[team], current_date)
-                    node_feat_matrix[idx] = self.node_features[team] * decay
-                else:
-                    node_feat_matrix[idx] = self.node_features[team]
-            else:
-                node_feat_matrix[idx] = np.ones(self.node_features_dim) * 0.5
-
-        # Build edges with time decay
-        edge_index = []
-        edge_attr = []
-        edge_days = []
-
-        for (team1, team2), (features, last_date) in self.edge_features.items():
-            if team1 in self.team_to_idx and team2 in self.team_to_idx:
-                idx1 = self.team_to_idx[team1]
-                idx2 = self.team_to_idx[team2]
-
-                # Apply time decay to edge features
-                decay = self._time_decay_weight(last_date, current_date)
-                decayed_features = features * decay
-
-                # Add bidirectional edges
-                edge_index.append([idx1, idx2])
-                edge_index.append([idx2, idx1])
-                edge_attr.append(decayed_features)
-                edge_attr.append(decayed_features)
-
-                # Days since last match
-                days_since = (current_date - last_date).days
-                edge_days.append(min(days_since, 365))
-                edge_days.append(min(days_since, 365))
-
-        if not edge_index:
-            return None
-
-        edge_index = torch.tensor(edge_index, dtype=torch.long).t().contiguous()
-        edge_attr = torch.tensor(np.array(edge_attr), dtype=torch.float)
-        edge_days = torch.tensor(edge_days, dtype=torch.float)
-
-        self._graph_cache = Data(
-            x=torch.tensor(node_feat_matrix, dtype=torch.float),
-            edge_index=edge_index,
-            edge_attr=edge_attr,
-            edge_days=edge_days
-        )
-        self._cache_timestamp = current_date
-
-        return self._graph_cache
-
-    def get_team_embedding(
-        self, 
-        team: str, 
-        model: GraphNeuralNetwork,
-        current_date: datetime
-    ) -> Optional[torch.Tensor]:
-        """Get node embedding for a specific team."""
-        graph = self.build_graph(current_date)
-        if graph is None or team not in self.team_to_idx:
-            return None
-
-        idx = self.team_to_idx[team]
-
-        with torch.no_grad():
-            node_embeddings, _ = model(
-                graph.x,
-                graph.edge_index,
-                graph.edge_attr,
-                graph.edge_days,
-                torch.zeros(graph.x.size(0), dtype=torch.long)
-            )
-
-        return node_embeddings[idx]
+else:
+    LeagueGraphBuilder = None
 
 
 class GNNModel(BaseModel):
@@ -962,3 +872,4 @@ class GNNModel(BaseModel):
         self.certified = data.get('certified', False)
 
         logger.info(f"GNN model V{self.version} loaded from {path}")
+GraphNeuralNetworkModel = GNNModel
