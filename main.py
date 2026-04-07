@@ -177,10 +177,11 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     print("   ✅ Database ready")
 
+    port = int(os.getenv("PORT", "5000"))
     print("=" * 50)
     print("✅ VIT Network: All Sources Connected")
-    print(f"📍 API: http://localhost:8000")
-    print(f"📊 Health: http://localhost:8000/health")
+    print(f"📍 API: http://localhost:{port}")
+    print(f"📊 Health: http://localhost:{port}/health")
     print("=" * 50)
 
     yield
@@ -218,9 +219,6 @@ app.add_middleware(
 app.include_router(predict.router)
 app.include_router(result.router)
 app.include_router(history.router)
-
-if os.path.isdir("frontend/dist"):
-    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
 
 
 # --- HEALTH ---
@@ -463,8 +461,8 @@ async def system_status():
     }
 
 
-# --- ROOT ---
-@app.get("/")
+# --- API INFO (root JSON info moved to /api so static frontend owns /) ---
+@app.get("/api")
 async def root():
     return {
         "name": "VIT Sports Intelligence Network",
@@ -486,12 +484,17 @@ async def root():
     }
 
 
+# --- STATIC FRONTEND (must be LAST — catches all unmatched routes) ---
+if os.path.isdir("frontend/dist"):
+    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=5000,
         reload=True,
         log_level="info"
     )
