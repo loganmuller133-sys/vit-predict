@@ -317,7 +317,7 @@ class AnomalyRegimeDetectionModel(BaseModel):
         Now receives both scaled and PCA features.
         """
         if features_scaled.shape[0] < 10:
-            return {"is_anomaly": False, "methods": [], "score": 0.0}
+            return {"is_anomaly": False, "methods": {}, "score": 0.0, "votes": 0, "total_methods": 0}
 
         results = {}
         anomaly_votes = 0

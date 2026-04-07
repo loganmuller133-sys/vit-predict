@@ -27,6 +27,8 @@ class OddsData:
     home_odds: float
     draw_odds: float
     away_odds: float
+    home_team: Optional[str] = None
+    away_team: Optional[str] = None
     over_25_odds: Optional[float] = None
     under_25_odds: Optional[float] = None
     btts_yes_odds: Optional[float] = None
@@ -291,6 +293,8 @@ class OddsAPIClient:
                 home_odds=best_home,
                 draw_odds=best_draw,
                 away_odds=best_away,
+                home_team=match_odds.get("home_team"),
+                away_team=match_odds.get("away_team"),
                 bookmaker=best_bookmaker or "best"
             )
 
@@ -354,6 +358,8 @@ class OddsAPIClient:
                 home_odds=home_odds,
                 draw_odds=draw_odds,
                 away_odds=away_odds,
+                home_team=match_odds.get("home_team"),
+                away_team=match_odds.get("away_team"),
                 over_25_odds=over_25_odds,
                 under_25_odds=under_25_odds,
                 btts_yes_odds=btts_yes_odds,

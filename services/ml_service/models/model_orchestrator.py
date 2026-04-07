@@ -63,9 +63,22 @@ class ModelOrchestrator:
             'anomaly': AnomalyRegimeDetectionModel("anom_001"),
         }
 
+        # Try to load saved models
+        import os
+        models_dir = "/workspaces/vit-predict/models"
+
         # Filter to certified models only
         self.models = {}
         for name, model in all_models.items():
+            # Try to load saved model
+            model_path = os.path.join(models_dir, f"{name}_model.pkl")
+            if os.path.exists(model_path):
+                try:
+                    model.load(model_path)
+                    logger.info(f"Loaded saved model: {name}")
+                except Exception as e:
+                    logger.warning(f"Failed to load saved model {name}: {e}")
+
             if model.certified:
                 self.models[name] = model
             else:
@@ -154,18 +167,18 @@ class ModelOrchestrator:
             # Calculate final probabilities
             if total_weight > 0:
                 for field in market_config["fields"]:
-                    result[field] = round(weighted_sum[field] / total_weight, 3)
+                    result[field] = float(round(weighted_sum[field] / total_weight, 3))
 
                 # Normalize if required (ensures sum to 1.0)
                 if market_config["normalize"]:
                     total = sum(result[field] for field in market_config["fields"])
                     if total > 0:
                         for field in market_config["fields"]:
-                            result[field] = round(result[field] / total, 3)
+                            result[field] = float(round(result[field] / total, 3))
             else:
                 # Use default values if no models contributed
                 for field, default_value in market_config["default"].items():
-                    result[field] = default_value
+                    result[field] = float(default_value)
 
             # Store metadata about contributing models
             result[f"{market_name}_contributing_models"] = contributing_models

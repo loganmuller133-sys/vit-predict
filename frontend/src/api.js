@@ -1,5 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000"
-const API_KEY = import.meta.env.VITE_API_KEY || ""
+const API_KEY = import.meta.env.VITE_API_KEY || "dev_api_key_12345"
 
 function defaultHeaders() {
   const headers = {

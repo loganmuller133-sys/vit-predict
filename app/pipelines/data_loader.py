@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from app.services.football_api import FootballDataClient
 from app.services.scraper import InjuryScraper
 from app.services.odds_api import OddsAPIClient, OddsData
+from app.services.team_mapper import TeamMapper
 
 logger = logging.getLogger(__name__)
 
@@ -145,16 +146,33 @@ class DataLoader:
 
     def _enrich_fixtures_with_odds(self, context: MatchContext) -> MatchContext:
         """Add odds data to fixtures"""
-        # Build lookup dictionary
+        # Build lookup dictionaries for odds by ID and by normalized team names
         odds_by_match = {}
+        odds_by_names = {}
         for odds in context.odds:
-            odds_by_match[odds.match_id] = odds
+            if odds.match_id:
+                odds_by_match[odds.match_id] = odds
+
+            if odds.home_team and odds.away_team:
+                key = (
+                    TeamMapper.normalize_name(odds.home_team),
+                    TeamMapper.normalize_name(odds.away_team)
+                )
+                odds_by_names[key] = odds
 
         # Enrich each fixture
         for fixture in context.fixtures:
             external_id = str(fixture.get("external_id"))
-            if external_id in odds_by_match:
-                odds = odds_by_match[external_id]
+            odds = odds_by_match.get(external_id)
+
+            if not odds:
+                fixture_key = (
+                    TeamMapper.normalize_name(fixture["home_team"]["name"]),
+                    TeamMapper.normalize_name(fixture["away_team"]["name"])
+                )
+                odds = odds_by_names.get(fixture_key) or odds_by_names.get((fixture_key[1], fixture_key[0]))
+
+            if odds:
                 fixture["odds"] = {
                     "home": odds.home_odds,
                     "draw": odds.draw_odds,

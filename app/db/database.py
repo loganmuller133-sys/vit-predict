@@ -12,6 +12,10 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # Guarantee asyncpg driver — replace any sync postgres scheme and remove unsupported sslmode params
 def _make_async_url(url: str) -> str:
+    # If already has async driver, return as-is
+    if "aiosqlite" in url or "asyncpg" in url:
+        return url
+
     parsed = urlparse(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
 
@@ -21,6 +25,8 @@ def _make_async_url(url: str) -> str:
     scheme = parsed.scheme
     if scheme in ("postgresql", "postgres") or scheme == "postgresql+psycopg2":
         scheme = "postgresql+asyncpg"
+    elif scheme == "sqlite":
+        scheme = "sqlite+aiosqlite"
 
     safe_query = urlencode(query)
     return urlunparse(parsed._replace(scheme=scheme, query=safe_query))

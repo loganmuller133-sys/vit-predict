@@ -131,7 +131,7 @@ async def lifespan(app: FastAPI):
     # Initialize data loader
     print("🔌 Initializing data sources...")
     football_api_key = os.getenv("FOOTBALL_DATA_API_KEY", "")
-    odds_api_key = os.getenv("ODDS_API_KEY", "")
+    odds_api_key = os.getenv("THE_ODDS_API_KEY", "")
 
     data_loader = DataLoader(
         api_key=football_api_key,
@@ -168,7 +168,7 @@ async def lifespan(app: FastAPI):
     print("   ✅ Database ready")
 
     print("=" * 50)
-    print("✅ VIT Network is OPERATIONAL")
+    print("✅ VIT Network: All Sources Connected")
     print(f"📍 API: http://localhost:8000")
     print(f"📊 Health: http://localhost:8000/health")
     print("=" * 50)
@@ -287,6 +287,26 @@ async def fetch_fixtures(
     }
 
 
+# --- TEST ENDPOINT ---
+@app.post("/test-predict")
+async def test_predict(match: dict):
+    """Test prediction without database"""
+    if orchestrator is None:
+        return {"error": "Orchestrator not initialized"}
+
+    features = {
+        "home_team": match.get("home_team"),
+        "away_team": match.get("away_team"),
+        "league": match.get("league", "premier_league")
+    }
+
+    try:
+        result = await orchestrator.predict(features, "test")
+        return {"raw_result": result, "predictions": result.get("predictions", {})}
+    except Exception as e:
+        return {"error": str(e), "type": type(e).__name__}
+
+
 @app.get("/fetch/historical")
 async def fetch_historical(
     competition: str = "premier_league",
@@ -321,7 +341,7 @@ async def get_odds(
         return {"error": "Data loader not initialized"}
 
     if not data_loader.odds_client:
-        return {"error": "Odds client not initialized. Check ODDS_API_KEY in .env"}
+        return {"error": "Odds client not initialized. Check THE_ODDS_API_KEY in .env"}
 
     odds = await data_loader.fetch_odds_only(
         competition=competition,

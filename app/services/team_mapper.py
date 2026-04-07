@@ -23,17 +23,48 @@ class TeamMapper:
 
     # Common team name variations
     TEAM_ALIASES = {
-        "Manchester United": ["Man United", "Man Utd", "MUFC", "Manchester Utd"],
-        "Manchester City": ["Man City", "MCFC", "Manchester C"],
+        "Manchester United": ["Man United", "Man Utd", "MUFC", "Manchester Utd", "Manchester United FC"],
+        "Manchester City": ["Man City", "MCFC", "Manchester C", "Manchester City FC"],
         "Liverpool": ["LFC", "Liverpool FC"],
         "Chelsea": ["CFC", "Chelsea FC"],
         "Arsenal": ["AFC", "Arsenal FC", "The Gunners"],
-        "Tottenham": ["Spurs", "Tottenham Hotspur", "THFC"],
-        "Newcastle": ["NUFC", "Newcastle United"],
-        "Aston Villa": ["Villa", "AVFC"],
-        "West Ham": ["WHUFC", "West Ham United"],
+        "Tottenham": ["Spurs", "Tottenham Hotspur", "Tottenham Hotspur FC", "THFC"],
+        "Newcastle": ["NUFC", "Newcastle United", "Newcastle United FC"],
+        "Aston Villa": ["Villa", "AVFC", "Aston Villa FC"],
+        "West Ham": ["WHUFC", "West Ham United", "West Ham United FC"],
         "Everton": ["EFC", "Everton FC"],
     }
+
+    @classmethod
+    def normalize_name(cls, name: str) -> str:
+        """Normalize team names to a canonical form for cross-source matching."""
+        if not name:
+            return ""
+
+        cleaned = re.sub(r"[^a-zA-Z0-9\s]", "", name).strip().lower()
+        cleaned = re.sub(r"\b(fc|cf|afc|the)\b", "", cleaned).strip()
+        cleaned = re.sub(r"\s+", " ", cleaned)
+
+        alias_map = {}
+        candidates = []
+        for canonical, aliases in cls.TEAM_ALIASES.items():
+            canonical_key = re.sub(r"[^a-zA-Z0-9\s]", "", canonical).strip().lower()
+            alias_map[canonical_key] = canonical
+            candidates.append(canonical_key)
+
+            for alias in aliases:
+                alias_key = re.sub(r"[^a-zA-Z0-9\s]", "", alias).strip().lower()
+                alias_map[alias_key] = canonical
+                candidates.append(alias_key)
+
+        if cleaned in alias_map:
+            return alias_map[cleaned]
+
+        match = get_close_matches(cleaned, candidates, n=1, cutoff=0.65)
+        if match:
+            return alias_map.get(match[0], name.strip())
+
+        return name.strip()
 
     def __init__(self, db: AsyncSession):
         self.db = db
