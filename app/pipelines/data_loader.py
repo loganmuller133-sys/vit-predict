@@ -3,7 +3,7 @@ import asyncio
 import logging
 import re
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, field
+from dataclasses import field
 from datetime import datetime, timedelta
 
 from app.services.football_api import FootballDataClient
@@ -13,7 +13,6 @@ from app.services.odds_api import OddsAPIClient, OddsData
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 def normalize_team_name(name: str) -> str:
     if not name:
         return ""

@@ -21,8 +21,6 @@ from app.services.alerts import TelegramAlert, AlertPriority
 # ML Orchestrator
 from services.ml_service.models.model_orchestrator import ModelOrchestrator
 
-load_dotenv()
-
 orchestrator = None
 data_loader = None
 telegram_alerts = None
