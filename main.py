@@ -3,6 +3,7 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from dotenv import load_dotenv
@@ -207,6 +208,9 @@ app.add_middleware(
 app.include_router(predict.router)
 app.include_router(result.router)
 app.include_router(history.router)
+
+if os.path.isdir("frontend/dist"):
+    app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
 
 
 # --- HEALTH ---
