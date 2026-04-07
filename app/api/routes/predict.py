@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.db.database import get_db
 from app.db.models import Match, Prediction
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/predict", tags=["predictions"], dependencies=[Depends(verify_api_key)])
 
 orchestrator = None
-telegram_alerts = None  # Add this global variable
+telegram_alerts = None
 MAX_STAKE = 0.05
 MIN_EDGE_THRESHOLD = 0.02
 
@@ -38,6 +38,36 @@ def set_telegram_alerts(alerts):
     """Set telegram alerts instance"""
     global telegram_alerts
     telegram_alerts = alerts
+
+
+def to_naive_utc(dt_input) -> datetime:
+    """
+    Convert any datetime to naive UTC for storage in TIMESTAMP WITHOUT TIME ZONE.
+
+    Args:
+        dt_input: datetime object or ISO string
+
+    Returns:
+        Naive datetime object (timezone-aware datetimes converted to UTC, then stripped)
+    """
+    if isinstance(dt_input, str):
+        # Parse ISO string
+        try:
+            parsed = datetime.fromisoformat(dt_input.replace('Z', '+00:00'))
+            # Strip timezone info - assume it's UTC
+            return parsed.replace(tzinfo=None)
+        except Exception as e:
+            logger.warning(f"Failed to parse kickoff_time string '{dt_input}': {e}")
+            return datetime.now()
+    elif isinstance(dt_input, datetime):
+        # If it has timezone info, convert to UTC then strip
+        if dt_input.tzinfo is not None:
+            utc_dt = dt_input.astimezone(timezone.utc)
+            return utc_dt.replace(tzinfo=None)
+        # If already naive, assume it's UTC and return as-is
+        return dt_input
+    else:
+        return datetime.now()
 
 
 def create_idempotency_key(match: MatchRequest) -> str:
@@ -91,7 +121,7 @@ async def predict(
     match: MatchRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """Generate prediction for a match with idempotency"""
+    """Generate prediction for a match with idempotency and timezone safety"""
     if orchestrator is None:
         raise HTTPException(status_code=503, detail="Orchestrator not initialized")
 
@@ -111,18 +141,25 @@ async def predict(
             if db_match:
                 return build_prediction_response(existing_pred, db_match)
 
+        # ✅ FIX: Convert kickoff_time to naive UTC before saving
+        naive_kickoff = to_naive_utc(match.kickoff_time)
+
+        logger.debug(f"Kickoff time conversion: {match.kickoff_time} -> {naive_kickoff}")
+
         # Save match to database
         db_match = Match(
             home_team=match.home_team,
             away_team=match.away_team,
             league=match.league,
-            kickoff_time=match.kickoff_time,
+            kickoff_time=naive_kickoff,  # ✅ Use naive UTC
             opening_odds_home=match.market_odds.get("home"),
             opening_odds_draw=match.market_odds.get("draw"),
             opening_odds_away=match.market_odds.get("away")
         )
         db.add(db_match)
         await db.flush()
+
+        logger.info(f"Match saved: {match.home_team} vs {match.away_team} at {naive_kickoff}")
 
         # Run orchestrator
         features = {
@@ -186,12 +223,33 @@ async def predict(
 
         logger.info(f"Prediction saved: match_id={db_match.id}, side={best_bet.get('best_side')}, edge={best_bet.get('edge', 0):.4f}")
 
+        # ✅ Send Telegram alert if edge > 3%
+        edge_value = best_bet.get("edge", 0)
+        if edge_value > 0.03 and telegram_alerts and telegram_alerts.enabled:
+            try:
+                alert = BetAlert(
+                    match_id=db_match.id,
+                    home_team=match.home_team,
+                    away_team=match.away_team,
+                    prediction=best_bet.get("best_side", "N/A"),
+                    probability=consensus_prob,
+                    edge=edge_value,
+                    stake=recommended_stake,
+                    odds=best_bet.get("odds", 2.0),
+                    confidence=result.get("confidence", {}).get("1x2", 0.5),
+                    kickoff_time=naive_kickoff
+                )
+                await telegram_alerts.send_bet_alert(alert)
+                logger.info(f"Edge alert sent for {match.home_team} vs {match.away_team}")
+            except Exception as e:
+                logger.warning(f"Failed to send Telegram alert: {e}")
+
         return build_prediction_response(prediction, db_match)
 
     except ValueError as e:
         logger.error(f"Validation error: {e}")
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
-        logger.error(f"Prediction failed: {e}")
+        logger.error(f"Prediction failed: {e}", exc_info=True)
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
