@@ -1,6 +1,9 @@
 # main.py
 import sys
 import os
+from dotenv import load_dotenv
+load_dotenv()
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks
@@ -122,6 +125,13 @@ async def lifespan(app: FastAPI):
     print("🚀 Starting VIT Sports Intelligence Network...")
     print("=" * 50)
 
+    # Validate API keys at startup
+    print("🔑 Checking API credentials...")
+    odds_api_key_status = "LOADED" if os.getenv("ODDS_API_KEY") or os.getenv("THE_ODDS_API_KEY") else "MISSING"
+    print(f"   System: THE_ODDS_API_KEY is {odds_api_key_status}")
+    football_api_key_status = "LOADED" if os.getenv("FOOTBALL_DATA_API_KEY") else "MISSING"
+    print(f"   System: FOOTBALL_DATA_API_KEY is {football_api_key_status}")
+
     # Load models
     print("📦 Loading ML models...")
     orchestrator = ModelOrchestrator()
@@ -131,7 +141,7 @@ async def lifespan(app: FastAPI):
     # Initialize data loader
     print("🔌 Initializing data sources...")
     football_api_key = get_env("FOOTBALL_DATA_API_KEY", "")
-    odds_api_key = get_env("THE_ODDS_API_KEY", "")
+    odds_api_key = get_env("ODDS_API_KEY", "") or get_env("THE_ODDS_API_KEY", "")
 
     data_loader = DataLoader(
         api_key=football_api_key,
