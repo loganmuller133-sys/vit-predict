@@ -1,13 +1,15 @@
 # main.py
+import sys
 import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from dotenv import load_dotenv
 
+from app.config import get_env
 from app.db.database import engine, Base, get_db
 from app.api.routes import predict, result, history
 from app.api.middleware.auth import APIKeyMiddleware
@@ -130,14 +132,14 @@ async def lifespan(app: FastAPI):
 
     # Initialize data loader
     print("🔌 Initializing data sources...")
-    football_api_key = os.getenv("FOOTBALL_DATA_API_KEY", "")
-    odds_api_key = os.getenv("THE_ODDS_API_KEY", "")
+    football_api_key = get_env("FOOTBALL_DATA_API_KEY", "")
+    odds_api_key = get_env("THE_ODDS_API_KEY", "")
 
     data_loader = DataLoader(
         api_key=football_api_key,
         odds_api_key=odds_api_key,
-        enable_scraping=os.getenv("ENABLE_SCRAPING", "true").lower() == "true",
-        enable_odds=os.getenv("ENABLE_ODDS", "true").lower() == "true"
+        enable_scraping=get_env("ENABLE_SCRAPING", "true").lower() == "true",
+        enable_odds=get_env("ENABLE_ODDS", "true").lower() == "true"
     )
     print(f"   ✅ Football API: {'ENABLED' if football_api_key else 'DISABLED'}")
     print(f"   ✅ Odds API: {'ENABLED' if odds_api_key else 'DISABLED'}")

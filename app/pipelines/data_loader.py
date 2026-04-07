@@ -1,6 +1,7 @@
 # app/pipelines/data_loader.py
 import asyncio
 import logging
+import re
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -8,12 +9,22 @@ from datetime import datetime, timedelta
 from app.services.football_api import FootballDataClient
 from app.services.scraper import InjuryScraper
 from app.services.odds_api import OddsAPIClient, OddsData
-from app.services.team_mapper import TeamMapper
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
+def normalize_team_name(name: str) -> str:
+    if not name:
+        return ""
+
+    cleaned = name.lower().strip()
+    cleaned = re.sub(r"\s+fc$", "", cleaned)
+    cleaned = re.sub(r"\s+hotspur$", "", cleaned)
+    cleaned = cleaned.strip()
+    return cleaned
+
+
 class MatchContext:
     """Container for all data related to upcoming matches"""
     fixtures: List[Dict] = field(default_factory=list)
@@ -155,8 +166,8 @@ class DataLoader:
 
             if odds.home_team and odds.away_team:
                 key = (
-                    TeamMapper.normalize_name(odds.home_team),
-                    TeamMapper.normalize_name(odds.away_team)
+                    normalize_team_name(odds.home_team),
+                    normalize_team_name(odds.away_team)
                 )
                 odds_by_names[key] = odds
 
@@ -167,8 +178,8 @@ class DataLoader:
 
             if not odds:
                 fixture_key = (
-                    TeamMapper.normalize_name(fixture["home_team"]["name"]),
-                    TeamMapper.normalize_name(fixture["away_team"]["name"])
+                    normalize_team_name(fixture["home_team"]["name"]),
+                    normalize_team_name(fixture["away_team"]["name"])
                 )
                 odds = odds_by_names.get(fixture_key) or odds_by_names.get((fixture_key[1], fixture_key[0]))
 
